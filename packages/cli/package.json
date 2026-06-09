@@ -1,0 +1,20 @@
+{
+  "name": "@sigsafe/cli",
+  "version": "0.0.0",
+  "description": "Command-line signature & transaction decoder for EVM wallets.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "sigsafe": "./dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sigsafe/core": "workspace:*",
+    "commander": "^12.1.0",
+    "picocolors": "^1.1.1"
+  }
+}

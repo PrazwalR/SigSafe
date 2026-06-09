@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+
+# Doc drops (uniswapv4.md, permit2.md, etc.) are never committed
+*.md
+!README.md
+!LICENSE.md
+!packages/*/README.md
+
+.DS_Store
+*.log
