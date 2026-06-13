@@ -1,29 +1,32 @@
 import { isHex, type Hex } from "viem";
-import type { DecodedIntent, RiskFlag } from "./types.js";
+import type { DecodedIntent, PartialIntent, RiskFlag } from "./types.js";
 import { Action, InputType, RiskLevel } from "./types.js";
-import { detectInputType } from "./detect/input-type.js";
+import type { DecodeOptions, ResolvedOptions } from "./options.js";
+import { detectInputType, MAX_INPUT_CHARS } from "./detect/input-type.js";
+import { parseTransaction } from "./parsers/transaction.js";
+import { parseEIP712 } from "./parsers/eip712.js";
+import { parseEIP7702 } from "./parsers/eip7702.js";
+import { enrichWithCode } from "./enrich/code.js";
+import { runRiskEngine, aggregateRisk } from "./risk/engine.js";
+import { humanize } from "./explain/humanize.js";
+import { safeStringify } from "./util/serialize.js";
 
 export const VERSION = "0.0.0";
-
-export interface DecodeOptions {
-  chainId?: number;
-  rpcUrl?: string;
-  offline?: boolean;
-  customBlocklist?: string[];
-}
-
-interface ResolvedOptions extends DecodeOptions {
-  chainId: number;
-  offline: boolean;
-}
-
-export type PartialIntent = Omit<DecodedIntent, "summary" | "risk" | "flags">;
 
 export async function decode(
   input: string | object,
   options: DecodeOptions = {},
 ): Promise<DecodedIntent> {
-  const opts: ResolvedOptions = { chainId: 1, offline: false, ...options };
+  const opts: ResolvedOptions = {
+    chainId: 1,
+    offline: false,
+    ...options,
+    chainIdExplicit: options.chainId !== undefined,
+  };
+
+  if (typeof input === "string" && input.length > MAX_INPUT_CHARS) {
+    return makeOversizedIntent(input, opts.chainId);
+  }
 
   let inputType: InputType;
   try {
@@ -34,7 +37,7 @@ export async function decode(
 
   try {
     const partial = await routeToParser(inputType, input, opts);
-    return finalize(partial);
+    return await finalize(partial, opts);
   } catch (err) {
     return makeUnknownIntent(input, inputType, opts.chainId, err);
   }
@@ -42,15 +45,28 @@ export async function decode(
 
 async function routeToParser(
   inputType: InputType,
-  _input: string | object,
-  _opts: ResolvedOptions,
+  input: string | object,
+  opts: ResolvedOptions,
 ): Promise<PartialIntent> {
-  throw new Error(`parser not yet implemented for ${inputType}`);
+  switch (inputType) {
+    case InputType.EIP712_TYPED:
+      return parseEIP712(input, opts);
+    case InputType.EIP7702_AUTH:
+      return parseEIP7702(input, opts.chainId);
+    case InputType.RAW_TRANSACTION:
+    case InputType.CALLDATA:
+      return parseTransaction(input, opts);
+    default:
+      throw new Error(`parser not yet implemented for ${inputType}`);
+  }
 }
 
-function finalize(partial: PartialIntent): DecodedIntent {
-  const flags: RiskFlag[] = [];
-  return { ...partial, flags, risk: RiskLevel.INFO, summary: "" };
+async function finalize(partial: PartialIntent, opts: ResolvedOptions): Promise<DecodedIntent> {
+  const enriched = await enrichWithCode(partial, opts);
+  const flags: RiskFlag[] = runRiskEngine(enriched, opts);
+  const risk = aggregateRisk(flags);
+  const summary = humanize(enriched);
+  return { ...enriched, flags, risk, summary };
 }
 
 function makeUnknownIntent(
@@ -82,6 +98,27 @@ function makeUnknownIntent(
   };
 }
 
+function makeOversizedIntent(input: string, chainId: number): DecodedIntent {
+  return {
+    summary: "Payload too large to decode safely. Treat with extreme caution.",
+    action: Action.UNKNOWN,
+    risk: RiskLevel.WARNING,
+    inputType: InputType.CALLDATA,
+    flags: [
+      {
+        id: "input-too-large",
+        severity: RiskLevel.WARNING,
+        title: "Oversized payload",
+        message: `Input exceeds the ${MAX_INPUT_CHARS}-character safety limit and was not decoded.`,
+        advice: "Legitimate signature payloads are small. Do not sign an unexpectedly huge payload.",
+      },
+    ],
+    details: { kind: "raw" },
+    raw: `${input.slice(0, 256)}…(truncated)`,
+    chainId,
+  };
+}
+
 function errMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   try {
@@ -91,20 +128,10 @@ function errMessage(err: unknown): string {
   }
 }
 
-function safeStringify(v: unknown): string {
-  try {
-    return JSON.stringify(v, (_k, x) => (typeof x === "bigint" ? x.toString() : x));
-  } catch {
-    try {
-      return String(v);
-    } catch {
-      return "[unserializable]";
-    }
-  }
-}
-
-export { detectInputType };
+export { detectInputType, MAX_INPUT_CHARS };
 export { Action, RiskLevel, InputType } from "./types.js";
+export type { DecodeOptions } from "./options.js";
+export type { PartialIntent } from "./types.js";
 export type {
   DecodedIntent,
   RiskFlag,

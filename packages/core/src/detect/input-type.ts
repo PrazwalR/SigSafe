@@ -1,6 +1,8 @@
 import { parseTransaction, type Hex } from "viem";
 import { InputType } from "../types.js";
 
+export const MAX_INPUT_CHARS = 1_048_576;
+
 export function detectInputType(input: string | object): InputType {
   if (typeof input === "object" && input !== null) {
     return classifyObject(input as Record<string, unknown>);
@@ -8,7 +10,7 @@ export function detectInputType(input: string | object): InputType {
   if (typeof input !== "string") return InputType.CALLDATA;
 
   const s = input.trim();
-  if (s.startsWith("{") || s.startsWith("[")) {
+  if ((s.startsWith("{") || s.startsWith("[")) && s.length <= MAX_INPUT_CHARS) {
     try {
       const obj = JSON.parse(s);
       if (obj && typeof obj === "object") return classifyObject(obj as Record<string, unknown>);
@@ -41,12 +43,13 @@ function classifyHex(s: string): InputType {
   if (body.length === 0) return InputType.RAW_TRANSACTION;
   if (body.length % 2 !== 0) return InputType.PERSONAL_SIGN;
 
+  const parseable = lower.length <= MAX_INPUT_CHARS;
   const b0 = parseInt(body.slice(0, 2), 16);
   if (b0 >= 0x01 && b0 <= 0x04 && body.length >= 4) {
     const b1 = parseInt(body.slice(2, 4), 16);
-    if (b1 >= 0xc0 && isSerializedTx(lower)) return InputType.RAW_TRANSACTION;
+    if (b1 >= 0xc0 && parseable && isSerializedTx(lower)) return InputType.RAW_TRANSACTION;
   }
-  if (b0 >= 0xf8 && isSerializedTx(lower)) return InputType.RAW_TRANSACTION;
+  if (b0 >= 0xf8 && parseable && isSerializedTx(lower)) return InputType.RAW_TRANSACTION;
   if (body.length >= 8) return InputType.CALLDATA;
   return InputType.PERSONAL_SIGN;
 }

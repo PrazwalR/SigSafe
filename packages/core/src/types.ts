@@ -38,7 +38,15 @@ export interface RiskFlag {
   title: string;
   message: string;
   advice?: string;
+  /**
+   * How sure the engine is this flag is a true positive. Lets consumers tune
+   * thresholds (e.g. a bot blocks only high-confidence CRITICAL) instead of
+   * treating every flag equally — the main defence against alert fatigue.
+   */
+  confidence?: Confidence;
 }
+
+export type Confidence = "low" | "medium" | "high";
 
 export enum InputType {
   RAW_TRANSACTION = "RAW_TRANSACTION",
@@ -95,6 +103,10 @@ export interface PermitDetails {
   nonce: bigint;
   spenderIsEoa?: boolean;
   spenderHasCode?: boolean;
+  /** EIP-712 domain.verifyingContract — for permit2 this is the Permit2 contract, not the token. */
+  verifyingContract?: Address;
+  /** EIP-712 domain.name — used to detect token impersonation ("USD Coin" on a fake contract). */
+  domainName?: string;
 }
 
 export interface DelegationDetails {
@@ -104,6 +116,8 @@ export interface DelegationDetails {
   delegateLabel?: string;
   chainId: number;
   nonce: bigint;
+  /** True once an RPC confirmed the delegate target has contract code. */
+  delegateHasCode?: boolean;
 }
 
 export interface SwapDetails {
@@ -132,3 +146,5 @@ export interface RawDetails {
   value?: bigint;
   data?: Hex;
 }
+
+export type PartialIntent = Omit<DecodedIntent, "summary" | "risk" | "flags">;

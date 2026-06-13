@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decode } from "./index.js";
+import { decode, MAX_INPUT_CHARS } from "./index.js";
 import { Action, InputType, RiskLevel } from "./types.js";
 import type { DecodedIntent } from "./types.js";
 
@@ -54,6 +54,17 @@ describe("decode (phase 1 skeleton)", () => {
     await expect(decode(evil)).resolves.toBeDefined();
     assertValidIntent(await decode(circular));
     assertValidIntent(await decode(evil));
+  });
+
+  it("bounds oversized input (DoS guard) without hanging or echoing it back", async () => {
+    const huge = "0x" + "a".repeat(MAX_INPUT_CHARS + 100);
+    const started = Date.now();
+    const r = await decode(huge);
+    expect(Date.now() - started).toBeLessThan(1000);
+    assertValidIntent(r);
+    expect(r.flags.map((f) => f.id)).toContain("input-too-large");
+    expect(r.risk).toBe(RiskLevel.WARNING);
+    expect(r.raw.length).toBeLessThan(400);
   });
 
   it("undecoded payloads return UNKNOWN + WARNING + a flag", async () => {
