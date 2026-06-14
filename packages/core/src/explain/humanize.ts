@@ -1,6 +1,6 @@
 import { Action } from "../types.js";
 import type { PartialIntent } from "../types.js";
-import { formatAmount, shorten } from "../util/format.js";
+import { describeAmount, formatAmount, shorten } from "../util/format.js";
 
 /** Turn a decoded intent into one plain-English sentence safe to show a user. */
 export function humanize(partial: PartialIntent): string {
@@ -8,7 +8,7 @@ export function humanize(partial: PartialIntent): string {
 
   switch (d.kind) {
     case "permit": {
-      const amt = d.isUnlimited ? "UNLIMITED" : formatAmount(d.amount, d.token.decimals);
+      const amt = d.isUnlimited ? "UNLIMITED" : describeAmount(d.amount, d.token.decimals);
       const sym = d.token.symbol ?? "tokens";
       const who = d.spenderLabel ?? shorten(d.spender);
       return `Off-chain permit (no gas): let ${who} spend ${amt} ${sym} from your wallet.`;
@@ -21,7 +21,7 @@ export function humanize(partial: PartialIntent): string {
           ? `Approve ${who} to transfer ANY NFT from this collection.`
           : `Revoke ${who}'s approval for this NFT collection.`;
       }
-      const amt = d.isUnlimited ? "UNLIMITED" : formatAmount(d.amount, d.token.decimals);
+      const amt = d.isUnlimited ? "UNLIMITED" : describeAmount(d.amount, d.token.decimals);
       const sym = d.token.symbol ?? "tokens";
       return `Approve ${who} to spend ${amt} ${sym}.`;
     }
@@ -33,8 +33,8 @@ export function humanize(partial: PartialIntent): string {
 
     case "transfer": {
       const sym = d.token === "native" ? "ETH" : (d.token.symbol ?? "tokens");
-      const decimals = d.token === "native" ? 18 : d.token.decimals;
-      return `Send ${formatAmount(d.amount, decimals)} ${sym} to ${shorten(d.recipient)}.`;
+      const amt = d.token === "native" ? formatAmount(d.amount, 18) : describeAmount(d.amount, d.token.decimals);
+      return `Send ${amt} ${sym} to ${shorten(d.recipient)}.`;
     }
 
     case "swap":
@@ -51,6 +51,18 @@ export function humanize(partial: PartialIntent): string {
       return fn
         ? `Call ${fn}() on ${d.toLabel ?? shorten(d.to)}.`
         : `Call an unknown function (${d.selector}) on ${shorten(d.to)}.`;
+    }
+
+    case "message": {
+      if (d.looksLikeHash) {
+        return "Sign an unreadable 32-byte hash. You cannot see what it authorises — verify the source.";
+      }
+      if (d.isSiwe) return "Sign in to a dApp (Sign-In with Ethereum). No funds move.";
+      if (d.text !== undefined) {
+        const preview = d.text.length > 120 ? `${d.text.slice(0, 117)}…` : d.text;
+        return `Sign a text message: “${preview.replace(/\s+/g, " ").trim()}”. No funds move from signing alone.`;
+      }
+      return `Sign a ${d.byteLength}-byte message. No funds move from signing alone.`;
     }
 
     case "raw":

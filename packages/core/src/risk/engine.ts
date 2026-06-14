@@ -12,6 +12,7 @@ import { ownershipTransferRule } from "./rules/ownership-transfer.js";
 import { chainMismatchRule } from "./rules/chain-mismatch.js";
 import { deadlineRules } from "./rules/deadline.js";
 import { zeroAddressRule } from "./rules/zero-address.js";
+import { blindHashSignRule } from "./rules/blind-hash-sign.js";
 
 export type RiskRule = (partial: PartialIntent, opts: ResolvedOptions) => RiskFlag | RiskFlag[] | null;
 
@@ -28,6 +29,7 @@ const ALL_RULES: RiskRule[] = [
   unknownSpenderRule,
   deadlineRules,
   zeroAddressRule,
+  blindHashSignRule,
 ];
 
 const RANK: Record<RiskLevel, number> = {

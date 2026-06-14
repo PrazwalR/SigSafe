@@ -22,6 +22,7 @@ export enum Action {
   CONTRACT_CALL = "CONTRACT_CALL",
   CONTRACT_DEPLOY = "CONTRACT_DEPLOY",
   NATIVE_TRANSFER = "NATIVE_TRANSFER",
+  MESSAGE_SIGN = "MESSAGE_SIGN", // personal_sign / arbitrary message
   UNKNOWN = "UNKNOWN",
 }
 
@@ -63,6 +64,7 @@ export type IntentDetails =
   | DelegationDetails
   | SwapDetails
   | GenericCallDetails
+  | MessageDetails
   | RawDetails;
 
 export interface TokenInfo {
@@ -138,6 +140,24 @@ export interface GenericCallDetails {
   selector: Hex;
   functionSignature?: string;
   decodedArgs?: Record<string, unknown>;
+}
+
+export interface MessageDetails {
+  kind: "message";
+  /** Human-readable text, when the message decodes to printable UTF-8. */
+  text?: string;
+  /** True when the input was hex rather than plain text. */
+  isHex: boolean;
+  /** Byte length of the message. */
+  byteLength: number;
+  /**
+   * True when the message is exactly a 32-byte hex value with no readable text —
+   * i.e. likely a raw hash being blind-signed (a UserOp/order/tx digest dressed
+   * up as a "nonce"). The single most dangerous personal_sign pattern.
+   */
+  looksLikeHash: boolean;
+  /** True when the text parses as an EIP-4361 (Sign-In with Ethereum) message. */
+  isSiwe?: boolean;
 }
 
 export interface RawDetails {

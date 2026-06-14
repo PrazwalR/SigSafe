@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Address } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { decode } from "../index.js";
 import { Action, RiskLevel } from "../types.js";
 
@@ -28,5 +29,15 @@ describe("EIP-7702 delegation decoding", () => {
     const ids = r.flags.map((f) => f.id);
     expect(ids).toContain("eip7702-delegation");
     expect(ids).toContain("known-drainer");
+  });
+
+  it("recovers the real authorizing EOA from a signed authorization", async () => {
+    const account = privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d");
+    const signed = await account.signAuthorization({ contractAddress: DELEGATE, chainId: 1, nonce: 7 });
+    const r = await decode({ ...signed });
+    if (r.details.kind !== "delegation") throw new Error("expected delegation");
+    expect(r.details.authority.toLowerCase()).toBe(account.address.toLowerCase());
+    expect(r.details.delegateTo.toLowerCase()).toBe(DELEGATE.toLowerCase());
+    expect(r.details.nonce).toBe(7n);
   });
 });

@@ -1,8 +1,17 @@
+import type { InputType } from "./types.js";
+
 export interface DecodeOptions {
   chainId?: number;
   rpcUrl?: string;
   offline?: boolean;
   customBlocklist?: string[];
+  /**
+   * Force how the input is interpreted, bypassing auto-detection. The calling
+   * wallet always knows the signing method, and a hex-encoded personal_sign
+   * message is byte-indistinguishable from calldata — pass the method here
+   * (e.g. InputType.PERSONAL_SIGN) so it is never mis-decoded as a contract call.
+   */
+  inputType?: InputType;
 }
 
 export interface ResolvedOptions extends DecodeOptions {

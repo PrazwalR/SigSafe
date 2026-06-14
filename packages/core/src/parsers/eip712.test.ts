@@ -108,4 +108,44 @@ describe("EIP-712 permit decoding", () => {
     expect(r.risk).toBe(RiskLevel.SAFE);
     expect(r.summary.length).toBeGreaterThan(0);
   });
+
+  it("Permit2 PermitBatch decodes the first entry", async () => {
+    const batch = {
+      domain: { name: "Permit2", chainId: 1, verifyingContract: PERMIT2 },
+      primaryType: "PermitBatch",
+      types: { PermitBatch: [] },
+      message: {
+        details: [
+          { token: USDC, amount: UINT160_MAX, expiration: "281474976710655", nonce: "0" },
+          { token: VICTIM, amount: "100", expiration: "281474976710655", nonce: "1" },
+        ],
+        spender: DRAINER,
+        sigDeadline: "281474976710655",
+      },
+    };
+    const r = await decode(batch, { offline: true });
+    if (r.details.kind !== "permit") throw new Error("expected permit");
+    expect(r.details.standard).toBe("permit2");
+    expect(r.details.token.address.toLowerCase()).toBe(USDC);
+    expect(r.details.isUnlimited).toBe(true);
+  });
+
+  it("handles a hex-string domain.chainId", async () => {
+    const r = await decode(eip2612({}, { chainId: "0x1" }), { offline: true });
+    expect(r.chainId).toBe(1);
+    expect(r.action).toBe(Action.PERMIT);
+  });
+
+  it("DAI permit with allowed=false is not unlimited", async () => {
+    const dai = {
+      domain: { name: "Dai Stablecoin", chainId: 1, verifyingContract: USDC },
+      primaryType: "Permit",
+      types: { Permit: [] },
+      message: { holder: VICTIM, spender: DRAINER, nonce: "0", expiry: "0", allowed: false },
+    };
+    const r = await decode(dai, { offline: true });
+    if (r.details.kind !== "permit") throw new Error("expected permit");
+    expect(r.details.isUnlimited).toBe(false);
+    expect(r.details.amount).toBe(0n);
+  });
 });

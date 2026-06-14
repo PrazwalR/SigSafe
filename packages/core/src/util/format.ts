@@ -13,6 +13,15 @@ export function formatAmount(amount: bigint, decimals?: number): string {
   }
 }
 
+/**
+ * Honest amount rendering: only divide by 10^decimals when decimals are known.
+ * Otherwise show the raw integer labelled as base units — never silently assume
+ * 18 (which would misreport a USDC/USDT amount by a factor of 10^12).
+ */
+export function describeAmount(amount: bigint, decimals?: number): string {
+  return decimals === undefined ? `${amount.toString()} base units` : formatAmount(amount, decimals);
+}
+
 export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 export function isZeroAddress(addr?: string): boolean {

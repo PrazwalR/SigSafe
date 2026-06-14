@@ -1,27 +1,42 @@
-import { createPublicClient, http, type Address } from "viem";
-import type { PartialIntent } from "../types.js";
+import { createPublicClient, http, parseAbiItem, type Address, type PublicClient } from "viem";
+import type { PartialIntent, TokenInfo } from "../types.js";
 import type { ResolvedOptions } from "../options.js";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
+const ERC20_DECIMALS = parseAbiItem("function decimals() view returns (uint8)");
+const ERC20_SYMBOL = parseAbiItem("function symbol() view returns (string)");
+
 /**
- * Optionally resolve whether a spender / delegate target is an EOA or a
- * contract, via a single eth_getCode call. This powers the strongest rule,
- * permit-to-eoa: a token approval to a personal wallet is a near-certain
- * drainer, because legitimate spenders are always contracts.
+ * Best-effort online enrichment. No-ops offline or without an rpcUrl. Every
+ * network call is wrapped — a dead or slow RPC must never break a decode, it
+ * just leaves the relevant hints unresolved.
  *
- * No-ops offline or without an rpcUrl. Any network failure is swallowed — a
- * dead RPC must never break a decode; the rule simply stays unconfirmed.
+ *  1. eth_getCode on the spender/delegate → EOA-vs-contract (powers permit-to-eoa).
+ *  2. ERC-20 symbol()/decimals() on the token → honest amounts and labels.
  */
-export async function enrichWithCode(partial: PartialIntent, opts: ResolvedOptions): Promise<PartialIntent> {
+export async function enrich(partial: PartialIntent, opts: ResolvedOptions): Promise<PartialIntent> {
   if (opts.offline || !opts.rpcUrl) return partial;
 
+  let client: PublicClient;
+  try {
+    client = createPublicClient({ transport: http(opts.rpcUrl) });
+  } catch {
+    return partial;
+  }
+
+  let p = await enrichCode(partial, client);
+  p = await enrichToken(p, client);
+  return p;
+}
+
+async function enrichCode(partial: PartialIntent, client: PublicClient): Promise<PartialIntent> {
   const d = partial.details;
   const target =
-    (d.kind === "permit" || d.kind === "approval") ? d.spender : d.kind === "delegation" ? d.delegateTo : undefined;
-  if (!target || target.toLowerCase() === ZERO_ADDRESS) return partial;
+    d.kind === "permit" || d.kind === "approval" ? d.spender : d.kind === "delegation" ? d.delegateTo : undefined;
+  if (!target || isZero(target)) return partial;
 
-  const hasCode = await fetchHasCode(opts.rpcUrl, target);
+  const hasCode = await fetchHasCode(client, target);
   if (hasCode === undefined) return partial;
 
   if (d.kind === "permit" || d.kind === "approval") {
@@ -33,12 +48,60 @@ export async function enrichWithCode(partial: PartialIntent, opts: ResolvedOptio
   return partial;
 }
 
-async function fetchHasCode(rpcUrl: string, address: Address): Promise<boolean | undefined> {
+async function enrichToken(partial: PartialIntent, client: PublicClient): Promise<PartialIntent> {
+  const d = partial.details;
+  const token: TokenInfo | undefined =
+    d.kind === "permit" || d.kind === "approval"
+      ? d.token
+      : d.kind === "transfer" && d.token !== "native"
+        ? d.token
+        : undefined;
+  if (!token || isZero(token.address)) return partial;
+  if (token.decimals !== undefined && token.symbol) return partial; // already known
+
+  const [decimals, symbol] = await Promise.all([
+    token.decimals === undefined ? fetchDecimals(client, token.address) : Promise.resolve(token.decimals),
+    token.symbol ? Promise.resolve(token.symbol) : fetchSymbol(client, token.address),
+  ]);
+
+  const merged: TokenInfo = { ...token, decimals: decimals ?? token.decimals, symbol: symbol ?? token.symbol };
+  if (d.kind === "permit" || d.kind === "approval" || d.kind === "transfer") {
+    return { ...partial, details: { ...d, token: merged } };
+  }
+  return partial;
+}
+
+async function fetchHasCode(client: PublicClient, address: Address): Promise<boolean | undefined> {
   try {
-    const client = createPublicClient({ transport: http(rpcUrl) });
     const code = await client.getCode({ address });
     return code !== undefined && code !== "0x" && code.length > 2;
   } catch {
     return undefined;
   }
+}
+
+async function fetchDecimals(client: PublicClient, address: Address): Promise<number | undefined> {
+  try {
+    return Number(await client.readContract({ address, abi: [ERC20_DECIMALS], functionName: "decimals" }));
+  } catch {
+    return undefined;
+  }
+}
+
+// Symbols are short (USDC, WETH). The token contract is attacker-chosen, so a
+// hostile symbol() could return megabytes — bound it before it reaches the UI.
+const MAX_SYMBOL_CHARS = 32;
+
+async function fetchSymbol(client: PublicClient, address: Address): Promise<string | undefined> {
+  try {
+    const s = await client.readContract({ address, abi: [ERC20_SYMBOL], functionName: "symbol" });
+    if (typeof s !== "string" || s.length === 0) return undefined;
+    return s.length > MAX_SYMBOL_CHARS ? s.slice(0, MAX_SYMBOL_CHARS) : s;
+  } catch {
+    return undefined;
+  }
+}
+
+function isZero(addr?: string): boolean {
+  return !addr || addr.toLowerCase() === ZERO_ADDRESS;
 }

@@ -67,6 +67,15 @@ describe("decode (phase 1 skeleton)", () => {
     expect(r.raw.length).toBeLessThan(400);
   });
 
+  it("bounds raw echo for oversized object input (object bypasses the string guard)", async () => {
+    const huge = { to: "0x1111111111111111111111111111111111111111", junk: "x".repeat(2_000_000) };
+    const started = Date.now();
+    const r = await decode(huge);
+    expect(Date.now() - started).toBeLessThan(1000);
+    assertValidIntent(r);
+    expect(r.raw.length).toBeLessThan(101_000);
+  });
+
   it("undecoded payloads return UNKNOWN + WARNING + a flag", async () => {
     const r = await decode("0x095ea7b3");
     expect(r.action).toBe(Action.UNKNOWN);

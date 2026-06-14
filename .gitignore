@@ -6,11 +6,15 @@ dist/
 .env.*
 !.env.example
 
-# Doc drops (uniswapv4.md, permit2.md, etc.) are never committed
+# Shell scripts and scratch test-command files — never committed
+*.sh
+
+# Only the root README.md is tracked. Every other markdown is ignored:
+# doc drops, SECURITY.md, and the package READMEs.
+# Note: npm still ships packages/core/README.md — npm packs from disk and
+# force-includes README files, so the npm page is unaffected by this rule.
 *.md
-!README.md
-!LICENSE.md
-!packages/*/README.md
+!/README.md
 
 .DS_Store
 *.log

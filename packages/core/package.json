@@ -1,8 +1,36 @@
 {
   "name": "@sigsafe/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Decode any signable EVM payload into a structured, human-readable intent with risk flags.",
   "license": "MIT",
+  "author": "Prazwal Ratti (https://github.com/PrazwalR)",
+  "homepage": "https://github.com/PrazwalR/SigSafe/tree/main/packages/core#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PrazwalR/SigSafe.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/PrazwalR/SigSafe/issues"
+  },
+  "keywords": [
+    "ethereum",
+    "evm",
+    "wallet",
+    "security",
+    "signature",
+    "eip-712",
+    "eip-2612",
+    "permit",
+    "permit2",
+    "eip-7702",
+    "approval",
+    "drainer",
+    "phishing",
+    "calldata",
+    "decoder",
+    "viem"
+  ],
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -14,8 +42,11 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist"],
+  "files": ["dist", "README.md"],
   "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit"

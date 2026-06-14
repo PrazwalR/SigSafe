@@ -6,12 +6,13 @@ import { detectInputType, MAX_INPUT_CHARS } from "./detect/input-type.js";
 import { parseTransaction } from "./parsers/transaction.js";
 import { parseEIP712 } from "./parsers/eip712.js";
 import { parseEIP7702 } from "./parsers/eip7702.js";
-import { enrichWithCode } from "./enrich/code.js";
+import { parsePersonalSign } from "./parsers/personal-sign.js";
+import { enrich } from "./enrich/code.js";
 import { runRiskEngine, aggregateRisk } from "./risk/engine.js";
 import { humanize } from "./explain/humanize.js";
 import { safeStringify } from "./util/serialize.js";
 
-export const VERSION = "0.0.0";
+export const VERSION = "0.1.0";
 
 export async function decode(
   input: string | object,
@@ -29,10 +30,14 @@ export async function decode(
   }
 
   let inputType: InputType;
-  try {
-    inputType = detectInputType(input);
-  } catch {
-    inputType = InputType.CALLDATA;
+  if (opts.inputType !== undefined) {
+    inputType = opts.inputType;
+  } else {
+    try {
+      inputType = detectInputType(input);
+    } catch {
+      inputType = InputType.CALLDATA;
+    }
   }
 
   try {
@@ -53,6 +58,8 @@ async function routeToParser(
       return parseEIP712(input, opts);
     case InputType.EIP7702_AUTH:
       return parseEIP7702(input, opts.chainId);
+    case InputType.PERSONAL_SIGN:
+      return parsePersonalSign(typeof input === "string" ? input : safeStringify(input), opts.chainId);
     case InputType.RAW_TRANSACTION:
     case InputType.CALLDATA:
       return parseTransaction(input, opts);
@@ -62,7 +69,7 @@ async function routeToParser(
 }
 
 async function finalize(partial: PartialIntent, opts: ResolvedOptions): Promise<DecodedIntent> {
-  const enriched = await enrichWithCode(partial, opts);
+  const enriched = await enrich(partial, opts);
   const flags: RiskFlag[] = runRiskEngine(enriched, opts);
   const risk = aggregateRisk(flags);
   const summary = humanize(enriched);
@@ -128,13 +135,22 @@ function errMessage(err: unknown): string {
   }
 }
 
+// Primitives + engine internals, exported for advanced embedders who want to
+// re-run rules, re-render summaries, or build on the registries directly.
 export { detectInputType, MAX_INPUT_CHARS };
+export { runRiskEngine, aggregateRisk, severityRank } from "./risk/engine.js";
+export { humanize } from "./explain/humanize.js";
+export { isKnownDrainer } from "./registry/known-bad.js";
+export { resolveLabel, isKnownGood, PERMIT2_ADDRESS } from "./registry/known-good.js";
 export { Action, RiskLevel, InputType } from "./types.js";
+
 export type { DecodeOptions } from "./options.js";
-export type { PartialIntent } from "./types.js";
+export type { RiskRule } from "./risk/engine.js";
 export type {
   DecodedIntent,
+  PartialIntent,
   RiskFlag,
+  Confidence,
   IntentDetails,
   TokenInfo,
   ApprovalDetails,
@@ -143,5 +159,6 @@ export type {
   DelegationDetails,
   SwapDetails,
   GenericCallDetails,
+  MessageDetails,
   RawDetails,
 } from "./types.js";
