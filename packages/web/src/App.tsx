@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { decode } from "@sigsafe/core";
 import type { DecodedIntent } from "@sigsafe/core";
+import { SignatureGuard } from "@sigsafe/react";
 import { EXAMPLES } from "./examples";
 import { RiskCard } from "./RiskCard";
 
@@ -18,6 +19,7 @@ export function App() {
   const [result, setResult] = useState<DecodedIntent | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [showGuard, setShowGuard] = useState(false);
 
   async function run(value: string, exampleNote?: string) {
     const payload = value.trim();
@@ -76,11 +78,31 @@ export function App() {
               ))}
             </select>
           </label>
-          <button className="decode" disabled={busy || input.trim().length === 0} onClick={() => run(input)}>
-            {busy ? "Decoding…" : "Decode"}
-          </button>
+          <div className="control-buttons">
+            <button
+              className="guard"
+              disabled={input.trim().length === 0}
+              onClick={() => setShowGuard(true)}
+              title="See the drop-in <SignatureGuard> component a wallet would show"
+            >
+              👛 Preview as wallet
+            </button>
+            <button className="decode" disabled={busy || input.trim().length === 0} onClick={() => run(input)}>
+              {busy ? "Decoding…" : "Decode"}
+            </button>
+          </div>
         </div>
       </section>
+
+      {showGuard && input.trim().length > 0 && (
+        <SignatureGuard
+          payload={input.trim()}
+          options={{ chainId, offline: true }}
+          title="Signature request"
+          onConfirm={() => setShowGuard(false)}
+          onCancel={() => setShowGuard(false)}
+        />
+      )}
 
       {note && <p className="example-note">{note}</p>}
 

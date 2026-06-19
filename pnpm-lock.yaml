@@ -57,6 +57,9 @@ importers:
       '@sigsafe/core':
         specifier: workspace:*
         version: link:../core
+      '@sigsafe/react':
+        specifier: workspace:*
+        version: link:../react
       react:
         specifier: ^18.3.1
         version: 18.3.1
