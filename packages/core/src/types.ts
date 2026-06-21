@@ -19,6 +19,7 @@ export enum Action {
   SWAP = "SWAP",
   DELEGATION = "DELEGATION",
   OWNERSHIP_TRANSFER = "OWNERSHIP_TRANSFER",
+  BATCH = "BATCH", // multicall / aggregator wrapping inner calls
   CONTRACT_CALL = "CONTRACT_CALL",
   CONTRACT_DEPLOY = "CONTRACT_DEPLOY",
   NATIVE_TRANSFER = "NATIVE_TRANSFER",
@@ -64,6 +65,7 @@ export type IntentDetails =
   | DelegationDetails
   | SwapDetails
   | GenericCallDetails
+  | BatchDetails
   | MessageDetails
   | RawDetails;
 
@@ -140,6 +142,19 @@ export interface GenericCallDetails {
   selector: Hex;
   functionSignature?: string;
   decodedArgs?: Record<string, unknown>;
+}
+
+export interface BatchDetails {
+  kind: "batch";
+  /** The contract the wrapper call targets (for self-multicalls, every inner call hits this too). */
+  to?: Address;
+  value: bigint;
+  /** What kind of aggregator wrapped these calls, e.g. "multicall", "multicall3", "safe". */
+  aggregator: string;
+  /** The decoded inner actions, in order. The risk of the batch is the worst of these. */
+  calls: PartialIntent[];
+  /** True when recursion was capped (depth/count limit) and some inner calls are left raw. */
+  truncated?: boolean;
 }
 
 export interface MessageDetails {

@@ -1,60 +1,19 @@
-import {
-  decodeFunctionData,
-  parseAbiItem,
-  parseTransaction as parseSerializedTx,
-  slice,
-  type Address,
-  type Hex,
-} from "viem";
-import { Action, InputType } from "../types.js";
+import { parseTransaction as parseSerializedTx, type Address, type Hex } from "viem";
+import { InputType } from "../types.js";
 import type { PartialIntent } from "../types.js";
 import type { ResolvedOptions } from "../options.js";
-import { KNOWN_SELECTORS } from "../registry/selectors.js";
-import { classifyAction } from "../classify/action.js";
+import { decodeCalldata } from "./calldata.js";
 import { safeStringify } from "../util/serialize.js";
-
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as Address;
 
 export function parseTransaction(input: string | object, opts: ResolvedOptions): PartialIntent {
   const { to, value, data, chainId, inputType } = extract(input, opts.chainId);
   const raw = typeof input === "string" ? input : safeStringify(input);
 
-  if (data.length <= 2) {
-    return {
-      action: Action.NATIVE_TRANSFER,
-      inputType,
-      chainId,
-      details: { kind: "transfer", token: "native", recipient: to ?? ZERO_ADDRESS, amount: value },
-      raw,
-    };
-  }
+  // Top-level decode is strict: a known-but-undecodable selector bails to UNKNOWN.
+  const intent = decodeCalldata({ to, value, data, chainId, inputType, depth: 0, strict: true });
 
-  if (data.length < 10) {
-    return {
-      action: Action.CONTRACT_CALL,
-      inputType,
-      chainId,
-      details: { kind: "call", to, value, selector: data },
-      raw,
-    };
-  }
-
-  const selector = slice(data, 0, 4);
-  const signature = KNOWN_SELECTORS[selector.toLowerCase()];
-  let args: readonly unknown[] | undefined;
-  if (signature) {
-    try {
-      const decoded = decodeFunctionData({ abi: [parseAbiItem(signature)], data });
-      args = decoded.args as readonly unknown[];
-    } catch {
-      // Known selector but the arguments don't decode (truncated/malformed).
-      // Don't fabricate a confident classification from missing data — bail to
-      // the UNKNOWN + WARNING path rather than pretend we parsed it.
-      throw new Error(`could not decode arguments for ${signature}`);
-    }
-  }
-
-  return classifyAction({ to, value, selector, functionSignature: signature, args, chainId, inputType, raw });
+  // Echo the original input rather than just the calldata.
+  return { ...intent, raw };
 }
 
 interface Extracted {

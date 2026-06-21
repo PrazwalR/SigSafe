@@ -44,6 +44,13 @@ export function severityRank(level: RiskLevel): number {
 }
 
 export function runRiskEngine(partial: PartialIntent, opts: ResolvedOptions): RiskFlag[] {
+  const flags = collectFlags(partial, opts);
+  return dedupe(flags).sort((a, b) => severityRank(b.severity) - severityRank(a.severity));
+}
+
+/** Run every rule on this intent, then recurse into batch children so a danger
+ *  hidden inside a multicall still surfaces at the top. */
+function collectFlags(partial: PartialIntent, opts: ResolvedOptions): RiskFlag[] {
   const flags: RiskFlag[] = [];
   for (const rule of ALL_RULES) {
     try {
@@ -55,7 +62,20 @@ export function runRiskEngine(partial: PartialIntent, opts: ResolvedOptions): Ri
       // A single misbehaving rule must never break the whole decode.
     }
   }
-  return flags.sort((a, b) => severityRank(b.severity) - severityRank(a.severity));
+  if (partial.details.kind === "batch") {
+    for (const child of partial.details.calls) flags.push(...collectFlags(child, opts));
+  }
+  return flags;
+}
+
+/** Collapse duplicate flag ids (common across batch children), keeping the most severe. */
+function dedupe(flags: RiskFlag[]): RiskFlag[] {
+  const byId = new Map<string, RiskFlag>();
+  for (const f of flags) {
+    const cur = byId.get(f.id);
+    if (!cur || severityRank(f.severity) > severityRank(cur.severity)) byId.set(f.id, f);
+  }
+  return [...byId.values()];
 }
 
 /** The overall risk is the max severity across all flags; no flags means SAFE. */

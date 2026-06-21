@@ -18,6 +18,12 @@ const ERC20_SYMBOL = parseAbiItem("function symbol() view returns (string)");
 export async function enrich(partial: PartialIntent, opts: ResolvedOptions): Promise<PartialIntent> {
   if (opts.offline || !opts.rpcUrl) return partial;
 
+  // Enrich each inner call so rules like permit-to-eoa fire inside a multicall.
+  if (partial.details.kind === "batch") {
+    const calls = await Promise.all(partial.details.calls.map((c) => enrich(c, opts)));
+    return { ...partial, details: { ...partial.details, calls } };
+  }
+
   let client: PublicClient;
   try {
     client = createPublicClient({ transport: http(opts.rpcUrl) });

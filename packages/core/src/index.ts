@@ -159,6 +159,7 @@ export type {
   DelegationDetails,
   SwapDetails,
   GenericCallDetails,
+  BatchDetails,
   MessageDetails,
   RawDetails,
 } from "./types.js";

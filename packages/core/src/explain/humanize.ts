@@ -53,6 +53,14 @@ export function humanize(partial: PartialIntent): string {
         : `Call an unknown function (${d.selector}) on ${shorten(d.to)}.`;
     }
 
+    case "batch": {
+      const n = d.calls.length;
+      if (n === 0) return `Batched call (${d.aggregator}) with no decodable inner actions.`;
+      const parts = d.calls.map((c, i) => `${i + 1}) ${humanize(c)}`);
+      const tail = d.truncated ? " (list truncated)" : "";
+      return `Batched ${n} action${n > 1 ? "s" : ""} via ${d.aggregator}${tail}: ${parts.join("  ")}`;
+    }
+
     case "message": {
       if (d.looksLikeHash) {
         return "Sign an unreadable 32-byte hash. You cannot see what it authorises — verify the source.";
