@@ -13,11 +13,14 @@ export const permitToEoaRule: RiskRule = (partial) => {
   if (d.kind !== "permit" && d.kind !== "approval") return null;
   if (d.spenderIsEoa !== true) return null;
 
+  const delegated = d.spenderIs7702 === true;
   return {
     id: "permit-to-eoa",
     severity: RiskLevel.CRITICAL,
-    title: "Approval to a personal wallet",
-    message: `You are granting token spending rights to ${shorten(d.spender)}, which is a personal wallet, not a smart contract. Legitimate apps grant approvals to contracts — this is a strong sign of a phishing/drainer attack.`,
+    title: delegated ? "Approval to a delegated wallet" : "Approval to a personal wallet",
+    message: delegated
+      ? `You are granting token spending rights to ${shorten(d.spender)}, a 7702-delegated wallet (an EOA with delegated code, not a real contract). Drainers use delegated wallets to look like contracts — legitimate apps grant approvals to actual contracts.`
+      : `You are granting token spending rights to ${shorten(d.spender)}, which is a personal wallet, not a smart contract. Legitimate apps grant approvals to contracts — this is a strong sign of a phishing/drainer attack.`,
     advice: "Do not sign. Legitimate DeFi approvals always target a contract (a router or vault), never a wallet.",
     confidence: "high",
   };

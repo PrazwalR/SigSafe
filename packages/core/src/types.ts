@@ -85,6 +85,8 @@ export interface ApprovalDetails {
   isUnlimited: boolean;
   spenderIsEoa?: boolean;
   spenderHasCode?: boolean;
+  /** Spender is a 7702-delegated EOA (has a designator, not real contract code). */
+  spenderIs7702?: boolean;
 }
 
 export interface TransferDetails {
@@ -107,6 +109,8 @@ export interface PermitDetails {
   nonce: bigint;
   spenderIsEoa?: boolean;
   spenderHasCode?: boolean;
+  /** Spender is a 7702-delegated EOA (has a designator, not real contract code). */
+  spenderIs7702?: boolean;
   /** EIP-712 domain.verifyingContract — for permit2 this is the Permit2 contract, not the token. */
   verifyingContract?: Address;
   /** EIP-712 domain.name — used to detect token impersonation ("USD Coin" on a fake contract). */

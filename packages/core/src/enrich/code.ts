@@ -42,14 +42,18 @@ async function enrichCode(partial: PartialIntent, client: PublicClient): Promise
     d.kind === "permit" || d.kind === "approval" ? d.spender : d.kind === "delegation" ? d.delegateTo : undefined;
   if (!target || isZero(target)) return partial;
 
-  const hasCode = await fetchHasCode(client, target);
-  if (hasCode === undefined) return partial;
+  const res = await fetchCode(client, target);
+  if (!res) return partial; // RPC failed — leave hints unresolved
+  const cls = classifyCode(res.code);
 
   if (d.kind === "permit" || d.kind === "approval") {
-    return { ...partial, details: { ...d, spenderHasCode: hasCode, spenderIsEoa: !hasCode } };
+    return {
+      ...partial,
+      details: { ...d, spenderHasCode: cls.isContract, spenderIsEoa: cls.isEoa, spenderIs7702: cls.is7702 },
+    };
   }
   if (d.kind === "delegation") {
-    return { ...partial, details: { ...d, delegateHasCode: hasCode } };
+    return { ...partial, details: { ...d, delegateHasCode: cls.isContract } };
   }
   return partial;
 }
@@ -77,12 +81,39 @@ async function enrichToken(partial: PartialIntent, client: PublicClient): Promis
   return partial;
 }
 
-async function fetchHasCode(client: PublicClient, address: Address): Promise<boolean | undefined> {
+export interface CodeClass {
+  /** No real contract code — a personal/externally-owned wallet. */
+  isEoa: boolean;
+  /** Real deployed contract code. */
+  isContract: boolean;
+  /** An EIP-7702 delegated EOA: has code, but it's a 0xef0100|address designator, not a contract. */
+  is7702: boolean;
+}
+
+/**
+ * Classify the result of eth_getCode. Two subtleties this gets right:
+ *  - viem returns `undefined` when an account has NO code — that's a plain EOA
+ *    (the #1 drainer target), not "unknown". Unknown is handled before we get
+ *    here (fetchCode returns null on RPC failure).
+ *  - Post-Pectra, a 7702-delegated EOA has a 23-byte `0xef0100 || address`
+ *    designator. That is still a *wallet*, not a contract — treating "has any
+ *    code" as "safe contract" would let a drainer hide behind a delegated EOA.
+ */
+export function classifyCode(code: string | undefined): CodeClass {
+  if (code === undefined) return { isEoa: true, isContract: false, is7702: false };
+  const c = code.toLowerCase();
+  if (c === "0x" || c.length <= 2) return { isEoa: true, isContract: false, is7702: false };
+  // 0xef0100 (3 bytes) + 20-byte address = 23 bytes = 48 hex chars including "0x".
+  if (c.startsWith("0xef0100") && c.length === 48) return { isEoa: true, isContract: false, is7702: true };
+  return { isEoa: false, isContract: true, is7702: false };
+}
+
+/** Returns null only when the RPC call itself fails — distinct from "no code" (undefined). */
+async function fetchCode(client: PublicClient, address: Address): Promise<{ code: string | undefined } | null> {
   try {
-    const code = await client.getCode({ address });
-    return code !== undefined && code !== "0x" && code.length > 2;
+    return { code: await client.getCode({ address }) };
   } catch {
-    return undefined;
+    return null;
   }
 }
 
